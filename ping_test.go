@@ -80,3 +80,34 @@ func Test_isIPv4(t *testing.T) {
 		})
 	}
 }
+
+func Test_isIPv6(t *testing.T) {
+	tests := []struct {
+		name  string
+		input net.IP
+		want  bool
+	}{
+		{
+			name: "valid ipv6 IP",
+			input: net.IP([]byte{
+				1, 1, 1, 1,
+				1, 1, 1, 1,
+				1, 1, 1, 1,
+				1, 1, 1, 1,
+			}),
+			want: true,
+		},
+		{
+			name:  "invalid ipv6 IP",
+			input: net.IP([]byte{1, 1, 1, 1}),
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isIPv6(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
