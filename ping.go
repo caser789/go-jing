@@ -1,6 +1,8 @@
 package ping
 
 import (
+	"fmt"
+	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"net"
 	"time"
@@ -8,6 +10,12 @@ import (
 
 // Pinger represents ICMP packet sender/receiver
 type Pinger struct {
+	// Number of packets sent
+	PacketsSent int
+
+	// stop chan bool
+	done chan bool
+
 	ipaddr  *net.IPAddr
 	addr    string
 	network string
@@ -66,6 +74,16 @@ func (p *Pinger) SetPrivileged(privileged bool) {
 // Privileged returns whether pinger is running in privileged mode.
 func (p *Pinger) Privileged() bool {
 	return p.network == "ip"
+}
+
+func (p *Pinger) listen(netProto string, source string) *icmp.PacketConn {
+	conn, err := icmp.ListenPacket(netProto, source)
+	if err != nil {
+		fmt.Printf("Error listening for ICMP packets: %s\n", err.Error())
+		close(p.done)
+		return nil
+	}
+	return conn
 }
 
 func byteSliceOfSize(n int) []byte {
