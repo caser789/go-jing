@@ -4,14 +4,55 @@ import (
 	"fmt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
+	"math"
 	"net"
 	"time"
 )
+
+// Statistics represent the stats of a currently running or finished
+// pinger operation.
+type Statistics struct {
+	// PacketsRecv is the number of packets received.
+	PacketsRecv int
+
+	// PacketsSent is the number of packets sent.
+	PacketsSent int
+
+	// PacketsLoss is the number of packets lost.
+	PacketsLoss float64
+
+	// IPAddr is the address of the host being pinged.
+	IPAddr *net.IPAddr
+
+	// Addr is the string address of the host being pinged.
+	Addr string
+
+	// Rtts is all of the round-trip times sent via this pinger.
+	Rtts []time.Duration
+
+	// MinRtt is minimum round-trip time sent via this pinger.
+	MinRtt time.Duration
+
+	// MaxRtt is maximum round-trip time sent via this pinger.
+	MaxRtt time.Duration
+
+	// AvgRtt is average round-trip time sent via this pinger.
+	AvgRtt time.Duration
+
+	// StdDevRtt is standard deviation round-trip times sent via this pinger.
+	StdDevRtt time.Duration
+}
 
 // Pinger represents ICMP packet sender/receiver
 type Pinger struct {
 	// Number of packets sent
 	PacketsSent int
+
+	// Number of packets received
+	PacketsRecv int
+
+	// rtts is all of the Rtts
+	rtts []time.Duration
 
 	// stop chan bool
 	done chan bool
@@ -74,6 +115,46 @@ func (p *Pinger) SetPrivileged(privileged bool) {
 // Privileged returns whether pinger is running in privileged mode.
 func (p *Pinger) Privileged() bool {
 	return p.network == "ip"
+}
+
+// Statistics returns the statistics of the pinger. This can be run while the
+// pinger is running or after it is finished. OnFinish calls this function to
+// get its finished statistics.
+func (p *Pinger) Statistics() *Statistics {
+	loss := float64(p.PacketsSent-p.PacketsRecv) / float64(p.PacketsSent) * 100
+	var min, max, total time.Duration
+	if len(p.rtts) > 0 {
+		min = p.rtts[0]
+		max = p.rtts[0]
+	}
+	for _, rtt := range p.rtts {
+		if rtt < min {
+			min = rtt
+		}
+		if rtt > max {
+			max = rtt
+		}
+		total += rtt
+	}
+	s := Statistics{
+		PacketsSent: p.PacketsSent,
+		PacketsRecv: p.PacketsRecv,
+		PacketsLoss: loss,
+		Rtts:        p.rtts,
+		Addr:        p.addr,
+		IPAddr:      p.ipaddr,
+		MaxRtt:      max,
+		MinRtt:      min,
+	}
+	if len(p.rtts) > 0 {
+		s.AvgRtt = total / time.Duration(len(p.rtts))
+		var sumsquares time.Duration
+		for _, rtt := range p.rtts {
+			sumsquares += (rtt - s.AvgRtt) * (rtt - s.AvgRtt)
+		}
+		s.StdDevRtt = time.Duration(math.Sqrt(float64(sumsquares / time.Duration(len(p.rtts)))))
+	}
+	return &s
 }
 
 func (p *Pinger) listen(netProto string, source string) *icmp.PacketConn {
