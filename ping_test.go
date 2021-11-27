@@ -1,6 +1,7 @@
 package ping
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -45,4 +46,10 @@ func Test_ipv4Payload(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func Test_bytesToTime(t *testing.T) {
+	tm := bytesToTime([]byte{1, 2, 3, 4, 5, 6, 7, 8})
+
+	fmt.Println(tm)
 }
