@@ -2,6 +2,7 @@ package ping
 
 import (
 	"golang.org/x/net/ipv4"
+	"net"
 	"time"
 )
 
@@ -28,4 +29,8 @@ func bytesToTime(b []byte) time.Time {
 		nsec += int64(b[i]) << ((7 - i) * 8)
 	}
 	return time.Unix(nsec/1000000000, nsec%1000000000)
+}
+
+func isIPv4(ip net.IP) bool {
+	return len(ip.To4()) == net.IPv4len
 }

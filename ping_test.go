@@ -3,6 +3,7 @@ package ping
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"net"
 	"testing"
 )
 
@@ -52,4 +53,30 @@ func Test_bytesToTime(t *testing.T) {
 	tm := bytesToTime([]byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 	fmt.Println(tm)
+}
+
+func Test_isIPv4(t *testing.T) {
+	tests := []struct {
+		name  string
+		input net.IP
+		want  bool
+	}{
+		{
+			name:  "valid ipv4 IP",
+			input: net.IP([]byte{1, 1, 1, 1}),
+			want:  true,
+		},
+		{
+			name:  "invalid ipv4 IP",
+			input: net.IP([]byte{1, 1, 1, 1, 1}),
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isIPv4(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
