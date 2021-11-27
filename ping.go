@@ -6,6 +6,50 @@ import (
 	"time"
 )
 
+// Pinger represents ICMP packet sender/receiver
+type Pinger struct {
+	ipaddr *net.IPAddr
+	addr   string
+}
+
+func New(addr string) *Pinger {
+	return &Pinger{
+		addr: addr,
+	}
+}
+
+func (p *Pinger) Resolve() error {
+	return nil
+}
+
+// SetIPAddr sets the ip address of the target host.
+func (p *Pinger) SetIPAddr(ipaddr *net.IPAddr) {
+	p.ipaddr = ipaddr
+	p.addr = ipaddr.String()
+}
+
+// IPAddr returns the IP address of the target host.
+func (p *Pinger) IPAddr() *net.IPAddr {
+	return p.ipaddr
+}
+
+// SetAddr resolves and sets the ip address of the target host, addr can be a
+// DNS name like "www.google.com" or IP like "127.0.0.1".
+func (p *Pinger) SetAddr(addr string) error {
+	ipaddr, err := net.ResolveIPAddr("ip4:icmp", addr)
+	if err != nil {
+		return err
+	}
+	p.addr = addr
+	p.ipaddr = ipaddr
+	return nil
+}
+
+// Addr returns the string ip address of the target host.
+func (p *Pinger) Addr() string {
+	return p.addr
+}
+
 func byteSliceOfSize(n int) []byte {
 	b := make([]byte, n)
 	for i := 0; i < len(b); i++ {

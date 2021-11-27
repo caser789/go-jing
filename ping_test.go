@@ -113,3 +113,18 @@ func Test_isIPv6(t *testing.T) {
 		})
 	}
 }
+
+func TestSetIPAddr(t *testing.T) {
+	googleAddr, err := net.ResolveIPAddr("ip", "www.google.com")
+	if err != nil {
+		t.Fatal("Cannot resolve www.google.com, can't run tests")
+	}
+	p := New("localhost")
+	err = p.Resolve()
+	assert.NoError(t, err)
+	assert.Equal(t, "localhost", p.Addr())
+
+	// Set IPAddr to google
+	p.SetIPAddr(googleAddr)
+	assert.Equal(t, googleAddr.String(), p.Addr())
+}
