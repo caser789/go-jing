@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -70,6 +71,11 @@ type Pinger struct {
 	addr     string
 	network  string
 	sequence int
+}
+
+type packet struct {
+	bytes  []byte
+	nbytes int
 }
 
 func New(addr string) *Pinger {
@@ -220,6 +226,37 @@ func (p *Pinger) sendICMP(conn *icmp.PacketConn) error {
 		break
 	}
 	return nil
+}
+
+func (p *Pinger) recvICMP(
+	conn *icmp.PacketConn,
+	recv chan<- *packet,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	for {
+		select {
+		case <-p.done:
+			return
+		default:
+			bytes := make([]byte, 512)
+			conn.SetReadDeadline(time.Now().Add(time.Millisecond * 100))
+			n, _, err := conn.ReadFrom(bytes)
+			if err != nil {
+				if neterr, ok := err.(*net.OpError); ok {
+					if neterr.Timeout() {
+						// Read timeout
+						continue
+					} else {
+						close(p.done)
+						return
+					}
+				}
+			}
+
+			recv <- &packet{bytes: bytes, nbytes: n}
+		}
+	}
 }
 
 func byteSliceOfSize(n int) []byte {
