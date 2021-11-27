@@ -36,7 +36,7 @@ type Statistics struct {
 	PacketsSent int
 
 	// PacketsLoss is the number of packets lost.
-	PacketsLoss float64
+	PacketLoss float64
 
 	// IPAddr is the address of the host being pinged.
 	IPAddr *net.IPAddr
@@ -231,7 +231,7 @@ func (p *Pinger) Statistics() *Statistics {
 	s := Statistics{
 		PacketsSent: p.PacketsSent,
 		PacketsRecv: p.PacketsRecv,
-		PacketsLoss: loss,
+		PacketLoss:  loss,
 		Rtts:        p.rtts,
 		Addr:        p.addr,
 		IPAddr:      p.ipaddr,

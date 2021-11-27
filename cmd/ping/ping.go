@@ -35,7 +35,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Printf(usage)
 	}
-	flag.Parsed()
+	flag.Parse()
 
 	if flag.NArg() == 0 {
 		flag.Usage()
