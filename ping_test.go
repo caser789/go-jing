@@ -1,10 +1,10 @@
 package ping
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"
+	"time"
 )
 
 func Test_byteSliceOfSize(t *testing.T) {
@@ -50,9 +50,11 @@ func Test_ipv4Payload(t *testing.T) {
 }
 
 func Test_bytesToTime(t *testing.T) {
-	tm := bytesToTime([]byte{1, 2, 3, 4, 5, 6, 7, 8})
+	tm := time.Now()
+	b := timeToBytes(tm)
+	tmGot := bytesToTime(b)
 
-	fmt.Println(tm)
+	assert.Equal(t, tm.UnixNano(), tmGot.UnixNano())
 }
 
 func Test_isIPv4(t *testing.T) {
