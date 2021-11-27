@@ -4,9 +4,16 @@ import (
 	"fmt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 	"math"
+	"math/rand"
 	"net"
+	"syscall"
 	"time"
+)
+
+const (
+	timeSliceLength = 8
 )
 
 // Statistics represent the stats of a currently running or finished
@@ -57,9 +64,12 @@ type Pinger struct {
 	// stop chan bool
 	done chan bool
 
-	ipaddr  *net.IPAddr
-	addr    string
-	network string
+	size     int
+	ipv4     bool
+	ipaddr   *net.IPAddr
+	addr     string
+	network  string
+	sequence int
 }
 
 func New(addr string) *Pinger {
@@ -165,6 +175,51 @@ func (p *Pinger) listen(netProto string, source string) *icmp.PacketConn {
 		return nil
 	}
 	return conn
+}
+
+func (p *Pinger) sendICMP(conn *icmp.PacketConn) error {
+	var typ icmp.Type
+	if p.ipv4 {
+		typ = ipv4.ICMPTypeEcho
+	} else {
+		typ = ipv6.ICMPTypeEchoRequest
+	}
+
+	var dst net.Addr = p.ipaddr
+	if p.network == "udp" {
+		dst = &net.UDPAddr{IP: p.ipaddr.IP, Zone: p.ipaddr.Zone}
+	}
+
+	t := timeToBytes(time.Now())
+	if p.size-timeSliceLength != 0 {
+		t = append(t, byteSliceOfSize(p.size-timeSliceLength)...)
+	}
+	bytes, err := (&icmp.Message{
+		Type: typ,
+		Code: 0,
+		Body: &icmp.Echo{
+			ID:   rand.Intn(65535),
+			Seq:  p.sequence,
+			Data: t,
+		},
+	}).Marshal(nil)
+	if err != nil {
+		return err
+	}
+
+	for {
+		if _, err := conn.WriteTo(bytes, dst); err != nil {
+			if neterr, ok := err.(*net.OpError); ok {
+				if neterr.Err == syscall.ENOBUFS {
+					continue
+				}
+			}
+		}
+		p.PacketsSent += 1
+		p.sequence += 1
+		break
+	}
+	return nil
 }
 
 func byteSliceOfSize(n int) []byte {
