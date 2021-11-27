@@ -14,7 +14,9 @@ import (
 )
 
 const (
-	timeSliceLength = 8
+	timeSliceLength  = 8
+	protocolICMP     = 1
+	protocolIPv6ICMP = 58
 )
 
 // Statistics represent the stats of a currently running or finished
@@ -53,6 +55,21 @@ type Statistics struct {
 
 // Pinger represents ICMP packet sender/receiver
 type Pinger struct {
+	// Interval is the wait time between each packet send. Default is 1s.
+	Interval time.Duration
+
+	// Timeout specifies a timeout before ping exits, regardless of how many
+	// packets have been received.
+	Timeout time.Duration
+
+	// Count tells pinger to stop after sending (and receiving) Count echo
+	// packets. If this option is not specified, pinger will operate until
+	// interrupted.
+	Count int
+
+	// Debug runs in debug mode
+	Debug bool
+
 	// Number of packets sent
 	PacketsSent int
 
@@ -62,20 +79,43 @@ type Pinger struct {
 	// rtts is all of the Rtts
 	rtts []time.Duration
 
+	// OnRecv is called when Pinger receives and processes a packet
+	OnRecv func(*Packet)
+
+	// OnFinish is called when Pinger exits
+	OnFinish func(*Statistics)
+
 	// stop chan bool
 	done chan bool
 
-	size     int
+	ipaddr *net.IPAddr
+	addr   string
+
 	ipv4     bool
-	ipaddr   *net.IPAddr
-	addr     string
-	network  string
+	source   string
+	size     int
 	sequence int
+	network  string
 }
 
 type packet struct {
 	bytes  []byte
 	nbytes int
+}
+
+// Packet represents a received and processed ICMP echo packet.
+type Packet struct {
+	// Rtt is the round-trip time it took to ping.
+	Rtt time.Duration
+
+	// IPAddr is the address of the host being pinged.
+	IPAddr *net.IPAddr
+
+	// Nbytes is the number of bytes in the message.
+	Nbytes int
+
+	// Seq is the ICMP sequence number
+	Seq int
 }
 
 func New(addr string) *Pinger {
@@ -257,6 +297,56 @@ func (p *Pinger) recvICMP(
 			recv <- &packet{bytes: bytes, nbytes: n}
 		}
 	}
+}
+
+func (p *Pinger) processPacket(recv *packet) error {
+	var bytes []byte
+	var proto int
+	if p.ipv4 {
+		if p.network == "ip" {
+			bytes = ipv4Payload(recv.bytes)
+		} else {
+			bytes = recv.bytes
+		}
+		proto = protocolICMP
+	} else {
+		bytes = recv.bytes
+		proto = protocolIPv6ICMP
+	}
+
+	var m *icmp.Message
+	var err error
+	if m, err = icmp.ParseMessage(proto, bytes[:recv.nbytes]); err != nil {
+		return fmt.Errorf("Error parsing icmp message")
+	}
+
+	if m.Type != ipv4.ICMPTypeEchoReply && m.Type != ipv6.ICMPTypeEchoReply {
+		// Not an echo reply, ignore it
+		return nil
+	}
+
+	outPkt := &Packet{
+		Nbytes: recv.nbytes,
+		IPAddr: p.ipaddr,
+	}
+
+	switch pkt := m.Body.(type) {
+	case *icmp.Echo:
+		outPkt.Rtt = time.Since(bytesToTime(pkt.Data[:timeSliceLength]))
+		outPkt.Seq = pkt.Seq
+		p.PacketsRecv += 1
+	default:
+		// Very bad, not sure how this can happen
+		return fmt.Errorf("Error, invalid ICMP echo reply, Body type: %T, %s", pkt, pkt)
+	}
+
+	p.rtts = append(p.rtts, outPkt.Rtt)
+	handler := p.OnRecv
+	if handler != nil {
+		handler(outPkt)
+	}
+
+	return nil
 }
 
 func byteSliceOfSize(n int) []byte {
