@@ -8,6 +8,8 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"os"
+	"os/signal"
 	"sync"
 	"syscall"
 	"time"
@@ -17,6 +19,11 @@ const (
 	timeSliceLength  = 8
 	protocolICMP     = 1
 	protocolIPv6ICMP = 58
+)
+
+var (
+	ipv4Proto = map[string]string{"ip": "ipv4:icmp", "udp": "udp4"}
+	ipv6Proto = map[string]string{"ip": "ipv6:ipv6-icmp", "udp": "udp6"}
 )
 
 // Statistics represent the stats of a currently running or finished
@@ -122,6 +129,35 @@ func New(addr string) *Pinger {
 	return &Pinger{
 		addr: addr,
 	}
+}
+
+// NewPinger returns a new Pinger struct pointer
+func NewPinger(addr string) (*Pinger, error) {
+	ipaddr, err := net.ResolveIPAddr("ip", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	var ipv4 bool
+	if isIPv4(ipaddr.IP) {
+		ipv4 = true
+	} else if isIPv6(ipaddr.IP) {
+		ipv4 = false
+	}
+
+	return &Pinger{
+		ipaddr:   ipaddr,
+		addr:     addr,
+		Interval: time.Second,
+		Timeout:  time.Second * 100000,
+		Count:    -1,
+
+		network: "udp",
+		ipv4:    ipv4,
+		size:    timeSliceLength,
+
+		done: make(chan bool),
+	}, nil
 }
 
 func (p *Pinger) Resolve() error {
@@ -347,6 +383,82 @@ func (p *Pinger) processPacket(recv *packet) error {
 	}
 
 	return nil
+}
+
+// Run runs the pinger. This is a blocking function that will exit when it's
+// done. If Count or Interval are not specified, it will continuously until
+// it is interrupted.
+func (p *Pinger) Run() {
+	p.run()
+}
+
+func (p *Pinger) run() {
+	var conn *icmp.PacketConn
+	if p.ipv4 {
+		if conn = p.listen(ipv4Proto[p.network], p.source); conn == nil {
+			return
+		}
+	} else {
+		if conn = p.listen(ipv6Proto[p.network], p.source); conn == nil {
+			return
+		}
+	}
+	defer conn.Close()
+	defer p.finish()
+
+	var wg sync.WaitGroup
+	recv := make(chan *packet, 5)
+	wg.Add(1)
+	go p.recvICMP(conn, recv, &wg)
+
+	err := p.sendICMP(conn)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	timeout := time.NewTicker(p.Timeout)
+	interval := time.NewTicker(p.Interval)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGTERM)
+
+	for {
+		select {
+		case <-c:
+			close(p.done)
+		case <-p.done:
+			wg.Wait()
+			return
+		case <-timeout.C:
+			close(p.done)
+			wg.Wait()
+			return
+		case <-interval.C:
+			err = p.sendICMP(conn)
+			if err != nil {
+				fmt.Println("FATAL: ", err.Error())
+			}
+		case r := <-recv:
+			err := p.processPacket(r)
+			if err != nil {
+				fmt.Println("FATAL: ", err.Error())
+			}
+		default:
+			if p.Count > 0 && p.PacketsRecv >= p.Count {
+				close(p.done)
+				wg.Wait()
+				return
+			}
+		}
+	}
+}
+
+func (p *Pinger) finish() {
+	handler := p.OnFinish
+	if handler != nil {
+		s := p.Statistics()
+		handler(s)
+	}
 }
 
 func byteSliceOfSize(n int) []byte {
