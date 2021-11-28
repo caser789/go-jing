@@ -302,3 +302,230 @@ func BenchmarkProcessPacket(b *testing.B) {
 		pinger.processPacket(&pkt)
 	}
 }
+
+func TestProcessPacket(t *testing.T) {
+	pinger := makeTestPinger()
+	shouldBe1 := 0
+	// this function should be called
+	pinger.OnRecv = func(pkt *Packet) {
+		shouldBe1++
+	}
+
+	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
+		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
+	}
+
+	body := &icmp.Echo{
+		ID:   pinger.id,
+		Seq:  pinger.sequence,
+		Data: data,
+	}
+
+	msg := &icmp.Message{
+		Type: ipv4.ICMPTypeEchoReply,
+		Code: 0,
+		Body: body,
+	}
+
+	msgBytes, _ := msg.Marshal(nil)
+
+	pkt := packet{
+		nbytes: len(msgBytes),
+		bytes:  msgBytes,
+		ttl:    24,
+	}
+
+	err := pinger.processPacket(&pkt)
+	assert.NoError(t, err)
+	assert.True(t, shouldBe1 == 1)
+}
+
+func TestProcessPacket_IgnoreNonEchoReplies(t *testing.T) {
+	pinger := makeTestPinger()
+	shouldBe0 := 0
+	// this function should not be called because the tracker is mismatches
+	pinger.OnRecv = func(pkt *Packet) {
+		shouldBe0++
+	}
+
+	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
+		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
+	}
+
+	body := &icmp.Echo{
+		ID:   pinger.id,
+		Seq:  pinger.sequence,
+		Data: data,
+	}
+
+	msg := &icmp.Message{
+		Type: ipv4.ICMPTypeDestinationUnreachable,
+		Code: 0,
+		Body: body,
+	}
+
+	msgBytes, _ := msg.Marshal(nil)
+
+	pkt := packet{
+		nbytes: len(msgBytes),
+		bytes:  msgBytes,
+		ttl:    24,
+	}
+
+	err := pinger.processPacket(&pkt)
+	assert.NoError(t, err)
+	assert.True(t, shouldBe0 == 0)
+}
+
+func TestProcessPacket_IDMismatch(t *testing.T) {
+	pinger := makeTestPinger()
+	pinger.network = "ip" // ID is only checked on "ip" network
+	shouldBe0 := 0
+	// this function should not be called because the tracker is mismatches
+	pinger.OnRecv = func(pkt *Packet) {
+		shouldBe0++
+	}
+
+	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
+		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
+	}
+
+	body := &icmp.Echo{
+		ID:   999999,
+		Seq:  pinger.sequence,
+		Data: data,
+	}
+
+	msg := &icmp.Message{
+		Type: ipv4.ICMPTypeEchoReply,
+		Code: 0,
+		Body: body,
+	}
+
+	msgBytes, _ := msg.Marshal(nil)
+
+	pkt := packet{
+		nbytes: len(msgBytes),
+		bytes:  msgBytes,
+		ttl:    24,
+	}
+
+	err := pinger.processPacket(&pkt)
+	assert.NoError(t, err)
+	assert.True(t, shouldBe0 == 0)
+}
+
+func TestProcessPacket_TrackerMismatch(t *testing.T) {
+	pinger := makeTestPinger()
+	shouldBe0 := 0
+	// this function should not be called because the tracker is mismatches
+	pinger.OnRecv = func(pkt *Packet) {
+		shouldBe0++
+	}
+
+	data := append(timeToBytes(time.Now()), intToBytes(999)...)
+	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
+		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
+	}
+
+	body := &icmp.Echo{
+		ID:   pinger.id,
+		Seq:  pinger.sequence,
+		Data: data,
+	}
+
+	msg := &icmp.Message{
+		Type: ipv4.ICMPTypeEchoReply,
+		Code: 0,
+		Body: body,
+	}
+
+	msgBytes, _ := msg.Marshal(nil)
+
+	pkt := packet{
+		nbytes: len(msgBytes),
+		bytes:  msgBytes,
+		ttl:    24,
+	}
+
+	err := pinger.processPacket(&pkt)
+	assert.NoError(t, err)
+	assert.True(t, shouldBe0 == 0)
+}
+
+func TestProcessPacket_LargePacket(t *testing.T) {
+	pinger := makeTestPinger()
+	pinger.Size = 4096
+
+	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
+		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
+	}
+
+	body := &icmp.Echo{
+		ID:   pinger.id,
+		Seq:  pinger.sequence,
+		Data: data,
+	}
+
+	msg := &icmp.Message{
+		Type: ipv4.ICMPTypeEchoReply,
+		Code: 0,
+		Body: body,
+	}
+
+	msgBytes, _ := msg.Marshal(nil)
+
+	pkt := packet{
+		nbytes: len(msgBytes),
+		bytes:  msgBytes,
+		ttl:    24,
+	}
+
+	err := pinger.processPacket(&pkt)
+	assert.NoError(t, err)
+}
+
+func TestProcessPacket_PacketTooSmall(t *testing.T) {
+	pinger := makeTestPinger()
+	data := []byte("foo")
+
+	body := &icmp.Echo{
+		ID:   pinger.id,
+		Seq:  pinger.sequence,
+		Data: data,
+	}
+
+	msg := &icmp.Message{
+		Type: ipv4.ICMPTypeEchoReply,
+		Code: 0,
+		Body: body,
+	}
+
+	msgBytes, _ := msg.Marshal(nil)
+
+	pkt := packet{
+		nbytes: len(msgBytes),
+		bytes:  msgBytes,
+		ttl:    24,
+	}
+
+	err := pinger.processPacket(&pkt)
+	assert.Error(t, err)
+}
+
+func makeTestPinger() *Pinger {
+	pinger, _ := NewPinger("127.0.0.1")
+
+	pinger.ipv4 = true
+	pinger.addr = "127.0.0.1"
+	pinger.network = "ip"
+	pinger.id = 123
+	pinger.Tracker = 456
+	pinger.Size = 0
+
+	return pinger
+}
