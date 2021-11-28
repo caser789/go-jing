@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	ping "github.com/caser789/go-jing"
+	"os"
+	"os/signal"
 	"time"
 )
 
@@ -51,6 +53,15 @@ func main() {
 		fmt.Printf("ERROR: %s\n", err.Error())
 		return
 	}
+
+	// Listen for ctrl-C signal
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for _ = range c {
+			pinger.Stop()
+		}
+	}()
 
 	pinger.OnRecv = func(pkt *ping.Packet) {
 		fmt.Printf(
