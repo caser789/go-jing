@@ -101,6 +101,7 @@ type Pinger struct {
 	ipv4     bool
 	source   string
 	Size     int
+	id       int
 	sequence int
 	network  string
 }
@@ -152,6 +153,7 @@ func NewPinger(addr string) (*Pinger, error) {
 		Timeout:  time.Second * 100000,
 		Count:    -1,
 
+		id:      rand.Intn(0xffff),
 		network: "udp",
 		ipv4:    ipv4,
 		Size:    timeSliceLength,
@@ -286,7 +288,7 @@ func (p *Pinger) sendICMP(conn *icmp.PacketConn) error {
 		Type: typ,
 		Code: 0,
 		Body: &icmp.Echo{
-			ID:   rand.Intn(65535),
+			ID:   p.id,
 			Seq:  p.sequence,
 			Data: t,
 		},
@@ -364,6 +366,12 @@ func (p *Pinger) processPacket(recv *packet) error {
 
 	if m.Type != ipv4.ICMPTypeEchoReply && m.Type != ipv6.ICMPTypeEchoReply {
 		// Not an echo reply, ignore it
+		return nil
+	}
+
+	// Check if reply from same ID
+	body := m.Body.(*icmp.Echo)
+	if body.ID != p.id {
 		return nil
 	}
 
