@@ -10,7 +10,7 @@ import (
 var usage = `
 Usage:
 
-	ping [-c count] [-i interval] [-t timeout] host
+	ping [-c count] [-i interval] [-t timeout] [--privileged] host
 
 Examples:
 
@@ -25,6 +25,9 @@ Examples:
 
 	# ping google for 10 seconds
 	ping -t 10s www.google.com
+
+	# Send a privileged raw ICMP ping
+	sudo ping --privileged www.google.com
 `
 
 func main() {
