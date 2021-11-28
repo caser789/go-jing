@@ -23,8 +23,8 @@ const (
 )
 
 var (
-	ipv4Proto = map[string]string{"ip": "ipv4:icmp", "udp": "udp4"}
-	ipv6Proto = map[string]string{"ip": "ipv6:ipv6-icmp", "udp": "udp6"}
+	ipv4Proto = map[string]string{"icmp": "ip4:icmp", "udp": "udp4"}
+	ipv6Proto = map[string]string{"icmp": "ip6:ipv6-icmp", "udp": "udp6"}
 )
 
 // Statistics represent the stats of a currently running or finished
@@ -61,7 +61,7 @@ type Statistics struct {
 	StdDevRtt time.Duration
 }
 
-// Pinger represents ICMP packet sender/receiver
+// Pinger represents a packet sender/receiver.
 type Pinger struct {
 	// Interval is the wait time between each packet send. Default is 1s.
 	Interval time.Duration
@@ -109,7 +109,10 @@ type Pinger struct {
 	Size     int
 	id       int
 	sequence int
-	network  string
+	// network is one of "ip", "ip4", "ip6".
+	network string
+	// protocol is "icmp" or "udp"
+	protocol string
 }
 
 type packet struct {
@@ -139,57 +142,54 @@ type Packet struct {
 	Ttl int
 }
 
+// New returns a new Pinger struct pointer
 func New(addr string) *Pinger {
-	return &Pinger{
-		addr: addr,
-	}
-}
-
-// NewPinger returns a new Pinger struct pointer
-func NewPinger(addr string) (*Pinger, error) {
-	ipaddr, err := net.ResolveIPAddr("ip", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	var ipv4 bool
-	if isIPv4(ipaddr.IP) {
-		ipv4 = true
-	} else if isIPv6(ipaddr.IP) {
-		ipv4 = false
-	}
-
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	return &Pinger{
-		ipaddr:   ipaddr,
-		addr:     addr,
+		Count: -1,
+
 		Interval: time.Second,
+		Size:     timeSliceLength,
 		Timeout:  time.Second * 100000,
-		Count:    -1,
+		Tracker:  r.Int63n(math.MaxInt64),
 
-		id:      r.Intn(math.MaxInt16),
-		network: "udp",
-		ipv4:    ipv4,
-		Size:    timeSliceLength,
-		Tracker: r.Int63n(math.MaxInt64),
-
-		done: make(chan bool),
-	}, nil
+		addr:     addr,
+		done:     make(chan bool),
+		id:       r.Intn(math.MaxInt16),
+		ipaddr:   nil,
+		ipv4:     false,
+		network:  "ip",
+		protocol: "udp",
+	}
 }
 
-func (p *Pinger) Resolve() error {
-	return nil
+// NewPinger returns a new Pinger and resolves the address.
+func NewPinger(addr string) (*Pinger, error) {
+	p := New(addr)
+	return p, p.Resolve()
 }
 
 // SetIPAddr sets the ip address of the target host.
 func (p *Pinger) SetIPAddr(ipaddr *net.IPAddr) {
-	var ipv4 bool
-	if isIPv4(ipaddr.IP) {
-		ipv4 = true
-	}
+	p.ipv4 = isIPv4(ipaddr.IP)
+
 	p.ipaddr = ipaddr
 	p.addr = ipaddr.String()
-	p.ipv4 = ipv4
+}
+
+// Resolve does the DNS lookup for the Pinger address and sets IP protocol.
+func (p *Pinger) Resolve() error {
+	ipaddr, err := net.ResolveIPAddr(p.network, p.addr)
+	if err != nil {
+		return err
+	}
+
+	p.ipv4 = isIPv4(ipaddr.IP)
+
+	p.ipaddr = ipaddr
+
+	return nil
 }
 
 // IPAddr returns the IP address of the target host.
@@ -200,14 +200,30 @@ func (p *Pinger) IPAddr() *net.IPAddr {
 // SetAddr resolves and sets the ip address of the target host, addr can be a
 // DNS name like "www.google.com" or IP like "127.0.0.1".
 func (p *Pinger) SetAddr(addr string) error {
-	ipaddr, err := net.ResolveIPAddr("ip", addr)
+	oldAddr := p.addr
+	p.addr = addr
+	err := p.Resolve()
 	if err != nil {
+		p.addr = oldAddr
 		return err
 	}
 
-	p.SetIPAddr(ipaddr)
-	p.addr = addr
 	return nil
+}
+
+// SetNetwork allows configuration of DNS resolution.
+// * "ip" will automatically select IPv4 or IPv6.
+// * "ip4" will select IPv4.
+// * "ip6" will select IPv6.
+func (p *Pinger) SetNetwork(n string) {
+	switch n {
+	case "ip4":
+		p.network = "ip4"
+	case "ip6":
+		p.network = "ip6"
+	default:
+		p.network = "ip"
+	}
 }
 
 // Addr returns the string ip address of the target host.
@@ -221,15 +237,15 @@ func (p *Pinger) Addr() string {
 // NOTE: setting to true requires that it be run with super-user privileges.
 func (p *Pinger) SetPrivileged(privileged bool) {
 	if privileged {
-		p.network = "ip"
+		p.protocol = "icmp"
 	} else {
-		p.network = "udp"
+		p.protocol = "udp"
 	}
 }
 
 // Privileged returns whether pinger is running in privileged mode.
 func (p *Pinger) Privileged() bool {
-	return p.network == "ip"
+	return p.protocol == "icmp"
 }
 
 // Statistics returns the statistics of the pinger. This can be run while the
@@ -291,7 +307,7 @@ func (p *Pinger) sendICMP(conn *icmp.PacketConn) error {
 	}
 
 	var dst net.Addr = p.ipaddr
-	if p.network == "udp" {
+	if p.protocol == "udp" {
 		dst = &net.UDPAddr{IP: p.ipaddr.IP, Zone: p.ipaddr.Zone}
 	}
 
@@ -408,7 +424,7 @@ func (p *Pinger) processPacket(recv *packet) error {
 	switch pkt := m.Body.(type) {
 	case *icmp.Echo:
 		// If we are privileged, we can math icmp.ID
-		if p.network == "ip" {
+		if p.protocol == "icmp" {
 			// Check if reply from same ID
 			if pkt.ID != p.id {
 				return nil
@@ -446,18 +462,21 @@ func (p *Pinger) processPacket(recv *packet) error {
 // done. If Count or Interval are not specified, it will continuously until
 // it is interrupted.
 func (p *Pinger) Run() {
-	p.run()
-}
-
-func (p *Pinger) run() {
 	var conn *icmp.PacketConn
+	var err error
+	if p.ipaddr == nil {
+		err = p.Resolve()
+	}
+	if err != nil {
+		return
+	}
 	if p.ipv4 {
-		if conn = p.listen(ipv4Proto[p.network]); conn == nil {
+		if conn = p.listen(ipv4Proto[p.protocol]); conn == nil {
 			return
 		}
 		conn.IPv4PacketConn().SetControlMessage(ipv4.FlagTTL, true)
 	} else {
-		if conn = p.listen(ipv6Proto[p.network]); conn == nil {
+		if conn = p.listen(ipv6Proto[p.protocol]); conn == nil {
 			return
 		}
 		conn.IPv6PacketConn().SetControlMessage(ipv6.FlagHopLimit, true)
@@ -471,7 +490,7 @@ func (p *Pinger) run() {
 	wg.Add(1)
 	go p.recvICMP(conn, recv, &wg)
 
-	err := p.sendICMP(conn)
+	err = p.sendICMP(conn)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -543,10 +562,6 @@ func timeToBytes(t time.Time) []byte {
 
 func isIPv4(ip net.IP) bool {
 	return len(ip.To4()) == net.IPv4len
-}
-
-func isIPv6(ip net.IP) bool {
-	return len(ip) == net.IPv6len
 }
 
 func bytesToInt(b []byte) int64 {
