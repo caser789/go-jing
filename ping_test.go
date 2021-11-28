@@ -210,11 +210,6 @@ func TestNewPingerInvalid(t *testing.T) {
 }
 
 func TestNewPingerValid(t *testing.T) {
-	googleAddr, err := net.ResolveIPAddr("ip", "www.google.com")
-	if err != nil {
-		t.Fatal("Can't resolve www.google.com, can't run tests")
-	}
-
 	p, err := NewPinger("www.google.com")
 	assert.NoError(t, err)
 	assert.Equal(t, "www.google.com", p.Addr())
@@ -227,7 +222,6 @@ func TestNewPingerValid(t *testing.T) {
 	assert.True(t, p.Privileged())
 	// Test setting to ipv4 address
 	err = p.SetAddr("www.google.com")
-	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
 	assert.NoError(t, err)
 	assert.True(t, isIPv4(p.IPAddr().IP))
 	// Test setting to ipv6 address
@@ -247,7 +241,6 @@ func TestNewPingerValid(t *testing.T) {
 	assert.True(t, p.Privileged())
 	// Test setting to ipv4 address
 	err = p.SetAddr("www.google.com")
-	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
 	assert.NoError(t, err)
 	assert.True(t, isIPv4(p.IPAddr().IP))
 	// Test setting to ipv6 address
@@ -265,7 +258,6 @@ func TestNewPingerValid(t *testing.T) {
 	assert.True(t, p.Privileged())
 	// Test setting to ipv4 address
 	err = p.SetAddr("www.google.com")
-	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
 	assert.NoError(t, err)
 	assert.True(t, isIPv4(p.IPAddr().IP))
 	// Test setting to ipv6 address
@@ -285,7 +277,6 @@ func TestNewPingerValid(t *testing.T) {
 	assert.True(t, p.Privileged())
 	// Test setting to ipv4 address
 	err = p.SetAddr("www.google.com")
-	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
 	assert.NoError(t, err)
 	assert.True(t, isIPv4(p.IPAddr().IP))
 	// Test setting to ipv6 address
@@ -303,7 +294,6 @@ func TestNewPingerValid(t *testing.T) {
 	assert.True(t, p.Privileged())
 	// Test setting to ipv4 address
 	err = p.SetAddr("www.google.com")
-	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
 	assert.NoError(t, err)
 	assert.True(t, isIPv4(p.IPAddr().IP))
 	// Test setting to ipv6 address
