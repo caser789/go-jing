@@ -380,23 +380,16 @@ func (p *Pinger) recvICMP(
 
 func (p *Pinger) processPacket(recv *packet) error {
 	receivedAt := time.Now()
-	var bytes []byte
 	var proto int
 	if p.ipv4 {
-		if p.network == "ip" {
-			bytes = ipv4Payload(recv)
-		} else {
-			bytes = recv.bytes
-		}
 		proto = protocolICMP
 	} else {
-		bytes = recv.bytes
 		proto = protocolIPv6ICMP
 	}
 
 	var m *icmp.Message
 	var err error
-	if m, err = icmp.ParseMessage(proto, bytes[:recv.nbytes]); err != nil {
+	if m, err = icmp.ParseMessage(proto, recv.bytes); err != nil {
 		return fmt.Errorf("error parsing icmp message: %s", err.Error())
 	}
 
@@ -529,16 +522,6 @@ func (p *Pinger) finish() {
 
 func (p *Pinger) Stop() {
 	close(p.done)
-}
-
-func ipv4Payload(recv *packet) []byte {
-	b := recv.bytes
-	if len(b) < ipv4.HeaderLen {
-		return b
-	}
-	hdrlen := int(b[0]&0x0f) << 2 // each bit for 4 bytes, minimum 5 bits
-	recv.nbytes -= hdrlen
-	return b[hdrlen:]
 }
 
 func bytesToTime(b []byte) time.Time {
