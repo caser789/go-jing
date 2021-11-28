@@ -159,3 +159,34 @@ func TestStatisticsLossy(t *testing.T) {
 	assert.Equal(t, time.Duration(11585), stats.AvgRtt)
 	assert.Equal(t, time.Duration(29603), stats.StdDevRtt)
 }
+
+func TestStatisticsSunny(t *testing.T) {
+	// Create a localhost ipv4 pinger
+	p, err := NewPinger("localhost")
+	assert.NoError(t, err)
+	assert.Equal(t, "localhost", p.Addr())
+
+	p.PacketsSent = 10
+	p.PacketsRecv = 10
+	p.rtts = []time.Duration{
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+		time.Duration(1000),
+	}
+
+	stats := p.Statistics()
+	assert.Equal(t, 10, stats.PacketsRecv)
+	assert.Equal(t, 10, stats.PacketsSent)
+	assert.Equal(t, 0.0, stats.PacketLoss)
+	assert.Equal(t, time.Duration(1000), stats.MinRtt)
+	assert.Equal(t, time.Duration(1000), stats.MaxRtt)
+	assert.Equal(t, time.Duration(1000), stats.AvgRtt)
+	assert.Equal(t, time.Duration(0), stats.StdDevRtt)
+}
