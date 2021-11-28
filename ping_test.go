@@ -119,6 +119,7 @@ func TestSetIPAddr(t *testing.T) {
 	if err != nil {
 		t.Fatal("Cannot resolve www.google.com, can't run tests")
 	}
+
 	p := New("localhost")
 	err = p.Resolve()
 	assert.NoError(t, err)
@@ -189,4 +190,21 @@ func TestStatisticsSunny(t *testing.T) {
 	assert.Equal(t, time.Duration(1000), stats.MaxRtt)
 	assert.Equal(t, time.Duration(1000), stats.AvgRtt)
 	assert.Equal(t, time.Duration(0), stats.StdDevRtt)
+}
+
+func TestNewPingerInvalid(t *testing.T) {
+	_, err := NewPinger("127.0.0.0.0.1")
+	assert.Equal(t, err.Error(), "lookup 127.0.0.0.0.1: no such host")
+
+	_, err = NewPinger("127..0.0.0.1")
+	assert.Equal(t, err.Error(), "lookup 127..0.0.0.1: no such host")
+
+	_, err = NewPinger("wtf")
+	assert.Equal(t, err.Error(), "lookup wtf: no such host")
+
+	_, err = NewPinger(":::1")
+	assert.Equal(t, err.Error(), "lookup :::1: no such host")
+
+	_, err = NewPinger("ipv5.google.com")
+	assert.Equal(t, err.Error(), "lookup ipv5.google.com: no such host")
 }
