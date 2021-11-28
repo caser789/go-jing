@@ -208,3 +208,106 @@ func TestNewPingerInvalid(t *testing.T) {
 	_, err = NewPinger("ipv5.google.com")
 	assert.Equal(t, err.Error(), "lookup ipv5.google.com: no such host")
 }
+
+func TestNewPingerValid(t *testing.T) {
+	googleAddr, err := net.ResolveIPAddr("ip", "www.google.com")
+	if err != nil {
+		t.Fatal("Can't resolve www.google.com, can't run tests")
+	}
+
+	p, err := NewPinger("www.google.com")
+	assert.NoError(t, err)
+	assert.Equal(t, "www.google.com", p.Addr())
+	// DNS names should resolve into IP addresses
+	assert.NotEqual(t, "www.google.com", p.IPAddr().String())
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	assert.False(t, p.Privileged())
+	// Test that SetPrivileged works
+	p.SetPrivileged(true)
+	assert.True(t, p.Privileged())
+	// Test setting to ipv4 address
+	err = p.SetAddr("www.google.com")
+	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
+	assert.NoError(t, err)
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	// Test setting to ipv6 address
+	err = p.SetAddr("ipv6.google.com")
+	assert.NoError(t, err)
+	assert.True(t, isIPv6(p.IPAddr().IP))
+
+	p, err = NewPinger("localhost")
+	assert.NoError(t, err)
+	assert.Equal(t, "localhost", p.Addr())
+	// DNS names should resolve into IP addresses
+	assert.NotEqual(t, "localhost", p.IPAddr().String())
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	assert.False(t, p.Privileged())
+	// Test that SetPrivileged works
+	p.SetPrivileged(true)
+	assert.True(t, p.Privileged())
+	// Test setting to ipv4 address
+	err = p.SetAddr("www.google.com")
+	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
+	assert.NoError(t, err)
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	// Test setting to ipv6 address
+	err = p.SetAddr("ipv6.google.com")
+	assert.NoError(t, err)
+	assert.True(t, isIPv6(p.IPAddr().IP))
+
+	p, err = NewPinger("127.0.0.1")
+	assert.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", p.Addr())
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	assert.False(t, p.Privileged())
+	// Test that SetPrivileged works
+	p.SetPrivileged(true)
+	assert.True(t, p.Privileged())
+	// Test setting to ipv4 address
+	err = p.SetAddr("www.google.com")
+	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
+	assert.NoError(t, err)
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	// Test setting to ipv6 address
+	err = p.SetAddr("ipv6.google.com")
+	assert.NoError(t, err)
+	assert.True(t, isIPv6(p.IPAddr().IP))
+
+	p, err = NewPinger("ipv6.google.com")
+	assert.NoError(t, err)
+	assert.Equal(t, "ipv6.google.com", p.Addr())
+	// DNS names should resolve into IP addresses
+	assert.NotEqual(t, "ipv6.google.com", p.IPAddr().String())
+	assert.True(t, isIPv6(p.IPAddr().IP))
+	assert.False(t, p.Privileged())
+	// Test that SetPrivileged works
+	p.SetPrivileged(true)
+	assert.True(t, p.Privileged())
+	// Test setting to ipv4 address
+	err = p.SetAddr("www.google.com")
+	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
+	assert.NoError(t, err)
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	// Test setting to ipv6 address
+	err = p.SetAddr("ipv6.google.com")
+	assert.NoError(t, err)
+	assert.True(t, isIPv6(p.IPAddr().IP))
+
+	p, err = NewPinger("::1")
+	assert.NoError(t, err)
+	assert.Equal(t, "::1", p.Addr())
+	assert.True(t, isIPv6(p.IPAddr().IP))
+	assert.False(t, p.Privileged())
+	// Test that SetPrivileged works
+	p.SetPrivileged(true)
+	assert.True(t, p.Privileged())
+	// Test setting to ipv4 address
+	err = p.SetAddr("www.google.com")
+	assert.True(t, p.IPAddr().IP.Equal(googleAddr.IP))
+	assert.NoError(t, err)
+	assert.True(t, isIPv4(p.IPAddr().IP))
+	// Test setting to ipv6 address
+	err = p.SetAddr("ipv6.google.com")
+	assert.NoError(t, err)
+	assert.True(t, isIPv6(p.IPAddr().IP))
+}
