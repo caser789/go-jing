@@ -100,7 +100,7 @@ type Pinger struct {
 
 	ipv4     bool
 	source   string
-	size     int
+	Size     int
 	sequence int
 	network  string
 }
@@ -154,7 +154,7 @@ func NewPinger(addr string) (*Pinger, error) {
 
 		network: "udp",
 		ipv4:    ipv4,
-		size:    timeSliceLength,
+		Size:    timeSliceLength,
 
 		done: make(chan bool),
 	}, nil
@@ -279,8 +279,8 @@ func (p *Pinger) sendICMP(conn *icmp.PacketConn) error {
 	}
 
 	t := timeToBytes(time.Now())
-	if p.size-timeSliceLength != 0 {
-		t = append(t, byteSliceOfSize(p.size-timeSliceLength)...)
+	if p.Size-timeSliceLength != 0 {
+		t = append(t, byteSliceOfSize(p.Size-timeSliceLength)...)
 	}
 	bytes, err := (&icmp.Message{
 		Type: typ,
