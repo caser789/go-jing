@@ -38,7 +38,7 @@ func main() {
 	count := flag.Int("c", -1, "")
 	privileged := flag.Bool("privileged", false, "")
 	flag.Usage = func() {
-		fmt.Printf(usage)
+		fmt.Print(usage)
 	}
 	flag.Parse()
 
@@ -58,7 +58,7 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
-		for _ = range c {
+		for range c {
 			pinger.Stop()
 		}
 	}()
