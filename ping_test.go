@@ -499,6 +499,11 @@ func TestProcessPacket_PacketTooSmall(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestEmptyIPAddr(t *testing.T) {
+	_, err := NewPinger("")
+	assert.Error(t, err)
+}
+
 func makeTestPinger() *Pinger {
 	pinger := New("127.0.0.1")
 	pinger.Resolve()

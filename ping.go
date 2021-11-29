@@ -3,6 +3,7 @@ package ping
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
@@ -180,6 +181,9 @@ func (p *Pinger) SetIPAddr(ipaddr *net.IPAddr) {
 
 // Resolve does the DNS lookup for the Pinger address and sets IP protocol.
 func (p *Pinger) Resolve() error {
+	if len(p.addr) == 0 {
+		return errors.New("addr cannot be empty")
+	}
 	ipaddr, err := net.ResolveIPAddr(p.network, p.addr)
 	if err != nil {
 		return err
