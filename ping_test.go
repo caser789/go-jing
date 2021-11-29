@@ -255,7 +255,7 @@ func BenchmarkProcessPacket(b *testing.B) {
 	pinger.id = 123
 	pinger.Tracker = 456
 
-	t := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	t := append(timeToBytes(time.Now()), uintToBytes(pinger.Tracker)...)
 	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		t = append(t, bytes.Repeat([]byte{1}, remainSize)...)
 	}
@@ -293,7 +293,7 @@ func TestProcessPacket(t *testing.T) {
 		shouldBe1++
 	}
 
-	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	data := append(timeToBytes(time.Now()), uintToBytes(pinger.Tracker)...)
 	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
 	}
@@ -332,7 +332,7 @@ func TestProcessPacket_IgnoreNonEchoReplies(t *testing.T) {
 		shouldBe0++
 	}
 
-	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	data := append(timeToBytes(time.Now()), uintToBytes(pinger.Tracker)...)
 	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
 	}
@@ -371,7 +371,7 @@ func TestProcessPacket_IDMismatch(t *testing.T) {
 		shouldBe0++
 	}
 
-	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	data := append(timeToBytes(time.Now()), uintToBytes(pinger.Tracker)...)
 	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
 	}
@@ -409,7 +409,7 @@ func TestProcessPacket_TrackerMismatch(t *testing.T) {
 		shouldBe0++
 	}
 
-	data := append(timeToBytes(time.Now()), intToBytes(999)...)
+	data := append(timeToBytes(time.Now()), uintToBytes(999)...)
 	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
 	}
@@ -443,7 +443,7 @@ func TestProcessPacket_LargePacket(t *testing.T) {
 	pinger := makeTestPinger()
 	pinger.Size = 4096
 
-	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	data := append(timeToBytes(time.Now()), uintToBytes(pinger.Tracker)...)
 	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
 	}
@@ -517,7 +517,7 @@ func TestProcessPacket_IgnoresDuplicateSequence(t *testing.T) {
 		dups++
 	}
 
-	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	data := append(timeToBytes(time.Now()), uintToBytes(pinger.Tracker)...)
 	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
 	}

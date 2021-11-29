@@ -112,8 +112,8 @@ type Pinger struct {
 	// OnDuplicateRecv is called when a packet is received that has already been received
 	OnDuplicateRecv func(*Packet)
 
-	// Tracker: Used to uniquely identify packet when non-privileged
-	Tracker int64
+	// Tracker: Used to uniquely identify packets
+	Tracker uint64
 
 	// Source is the source IP address
 	Source string
@@ -171,13 +171,13 @@ func New(addr string) *Pinger {
 
 		Interval:   time.Second,
 		Size:       timeSliceLength,
-		Timeout:    time.Second * 100000,
-		Tracker:    r.Int63n(math.MaxInt64),
+		Timeout:    time.Duration(math.MaxInt64),
+		Tracker:    r.Uint64(),
 		RecordRtts: true,
 
 		addr:              addr,
 		done:              make(chan bool),
-		id:                r.Intn(math.MaxInt16),
+		id:                r.Intn(math.MaxUint16),
 		ipaddr:            nil,
 		ipv4:              false,
 		network:           "ip",
@@ -336,7 +336,7 @@ func (p *Pinger) sendICMP(conn *icmp.PacketConn) error {
 		dst = &net.UDPAddr{IP: p.ipaddr.IP, Zone: p.ipaddr.Zone}
 	}
 
-	t := append(timeToBytes(time.Now()), intToBytes(p.Tracker)...)
+	t := append(timeToBytes(time.Now()), uintToBytes(p.Tracker)...)
 	if remainSize := p.Size - timeSliceLength - trackerLength; remainSize > 0 {
 		t = append(t, bytes.Repeat([]byte{1}, remainSize)...)
 	}
@@ -397,7 +397,8 @@ func (p *Pinger) recvICMP(
 		case <-p.done:
 			return nil
 		default:
-			bytes := make([]byte, 512)
+			// ICMP messages have an 8-byte header.
+			bytes := make([]byte, p.Size+8)
 			if err := conn.SetReadDeadline(time.Now().Add(time.Millisecond * 100)); err != nil {
 				return err
 			}
@@ -466,18 +467,15 @@ func (p *Pinger) processPacket(recv *packet) error {
 
 	switch pkt := m.Body.(type) {
 	case *icmp.Echo:
-		// If we are privileged, we can math icmp.ID
-		if p.protocol == "icmp" {
-			// Check if reply from same ID
-			if pkt.ID != p.id {
-				return nil
-			}
+		// Check if the reply has the ID we expect.
+		if pkt.ID != p.id {
+			return nil
 		}
 		if len(pkt.Data) < timeSliceLength+trackerLength {
 			return fmt.Errorf("insufficient data received; got: %d %v", len(pkt.Data), pkt.Data)
 		}
 
-		tracker := bytesToInt(pkt.Data[timeSliceLength:])
+		tracker := bytesToUint(pkt.Data[timeSliceLength:])
 		timestamp := bytesToTime(pkt.Data[:timeSliceLength])
 
 		if tracker != p.Tracker {
@@ -624,13 +622,13 @@ func isIPv4(ip net.IP) bool {
 	return len(ip.To4()) == net.IPv4len
 }
 
-func bytesToInt(b []byte) int64 {
-	return int64(binary.BigEndian.Uint64(b))
+func bytesToUint(b []byte) uint64 {
+	return uint64(binary.BigEndian.Uint64(b))
 }
 
-func intToBytes(tracker int64) []byte {
+func uintToBytes(tracker uint64) []byte {
 	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(tracker))
+	binary.BigEndian.PutUint64(b, tracker)
 	return b
 }
 
