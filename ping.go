@@ -170,7 +170,7 @@ func New(addr string) *Pinger {
 		Count: -1,
 
 		Interval:   time.Second,
-		Size:       timeSliceLength,
+		Size:       timeSliceLength + trackerLength,
 		Timeout:    time.Duration(math.MaxInt64),
 		Tracker:    r.Uint64(),
 		RecordRtts: true,
@@ -398,7 +398,7 @@ func (p *Pinger) recvICMP(
 			return nil
 		default:
 			// ICMP messages have an 8-byte header.
-			bytes := make([]byte, p.Size+8)
+			bytes := make([]byte, p.getMessageLength())
 			if err := conn.SetReadDeadline(time.Now().Add(time.Millisecond * 100)); err != nil {
 				return err
 			}
