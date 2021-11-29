@@ -134,9 +134,9 @@ func TestNewPingerInvalid(t *testing.T) {
 	err = p.Resolve()
 	assert.Equal(t, err.Error(), "lookup 127..0.0.0.1: no such host")
 
-	p = New("wtf")
+	p = New("wtf.invalid")
 	err = p.Resolve()
-	assert.Equal(t, err.Error(), "lookup wtf: no such host")
+	assert.Equal(t, err.Error(), "lookup wtf.invalid: no such host")
 
 	p = New(":::1")
 	err = p.Resolve()
@@ -303,6 +303,7 @@ func TestProcessPacket(t *testing.T) {
 		Seq:  pinger.sequence,
 		Data: data,
 	}
+	pinger.awaitingSequences[pinger.sequence] = struct{}{}
 
 	msg := &icmp.Message{
 		Type: ipv4.ICMPTypeEchoReply,
@@ -502,6 +503,58 @@ func TestProcessPacket_PacketTooSmall(t *testing.T) {
 func TestEmptyIPAddr(t *testing.T) {
 	_, err := NewPinger("")
 	assert.Error(t, err)
+}
+func TestProcessPacket_IgnoresDuplicateSequence(t *testing.T) {
+	pinger := makeTestPinger()
+	shouldBe1 := 0
+	dups := 0
+
+	pinger.OnRecv = func(p *Packet) {
+		shouldBe1++
+	}
+
+	pinger.OnDuplicateRecv = func(p *Packet) {
+		dups++
+	}
+
+	data := append(timeToBytes(time.Now()), intToBytes(pinger.Tracker)...)
+	if remainSize := pinger.Size - timeSliceLength - trackerLength; remainSize > 0 {
+		data = append(data, bytes.Repeat([]byte{1}, remainSize)...)
+	}
+
+	body := &icmp.Echo{
+		ID:   123,
+		Seq:  0,
+		Data: data,
+	}
+	// register the sequence as sent
+	pinger.awaitingSequences[0] = struct{}{}
+
+	msg := &icmp.Message{
+		Type: ipv4.ICMPTypeEchoReply,
+		Code: 0,
+		Body: body,
+	}
+
+	msgBytes, _ := msg.Marshal(nil)
+
+	pkt := packet{
+		nbytes: len(msgBytes),
+		bytes:  msgBytes,
+		ttl:    24,
+	}
+
+	err := pinger.processPacket(&pkt)
+	assert.NoError(t, err)
+	// receive a duplicate
+	err = pinger.processPacket(&pkt)
+	assert.NoError(t, err)
+
+	// shouldBe1 should be 1 even though 2 packets are received
+	assert.False(t, shouldBe1 == 2)
+	assert.True(t, shouldBe1 == 1)
+	assert.True(t, dups == 1)
+	assert.True(t, pinger.PacketsRecvDuplicates == 1)
 }
 
 func makeTestPinger() *Pinger {
