@@ -99,6 +99,7 @@ type Pinger struct {
 	avgRtt    time.Duration
 	stdDevRtt time.Duration
 	stddevm2  time.Duration
+	statsMu   sync.RWMutex
 
 	// If true, keep a record of rtts of all received packets.
 	// Set to false to avoid memory bloat for long running pings.
@@ -208,7 +209,13 @@ func (p *Pinger) SetIPAddr(ipaddr *net.IPAddr) {
 }
 
 func (p *Pinger) updateStatistics(pkt *Packet) {
+	p.statsMu.Lock()
+	defer p.statsMu.Unlock()
+
 	p.PacketsRecv++
+	if p.RecordRtts {
+		p.rtts = append(p.rtts, pkt.Rtt)
+	}
 	if p.PacketsRecv == 1 || pkt.Rtt < p.minRtt {
 		p.minRtt = pkt.Rtt
 	}
@@ -305,9 +312,12 @@ func (p *Pinger) Privileged() bool {
 // pinger is running or after it is finished. OnFinish calls this function to
 // get its finished statistics.
 func (p *Pinger) Statistics() *Statistics {
-	loss := float64(p.PacketsSent-p.PacketsRecv) / float64(p.PacketsSent) * 100
+	p.statsMu.RLock()
+	defer p.statsMu.RUnlock()
+	sent := p.PacketsSent
+	loss := float64(sent-p.PacketsRecv) / float64(sent) * 100
 	s := Statistics{
-		PacketsSent:           p.PacketsSent,
+		PacketsSent:           sent,
 		PacketsRecv:           p.PacketsRecv,
 		PacketsRecvDuplicates: p.PacketsRecvDuplicates,
 		PacketLoss:            loss,
@@ -507,9 +517,6 @@ func (p *Pinger) processPacket(recv *packet) error {
 		return fmt.Errorf("invalid ICMP echo reply; type: '%T', '%v'", pkt, pkt)
 	}
 
-	if p.RecordRtts {
-		p.rtts = append(p.rtts, inPkt.Rtt)
-	}
 	handler := p.OnRecv
 	if handler != nil {
 		handler(inPkt)
