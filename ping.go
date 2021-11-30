@@ -108,6 +108,9 @@ type Pinger struct {
 	// rtts is all of the Rtts
 	rtts []time.Duration
 
+	// OnSetup is called when Pinger has finished setting up the listening socket.
+	OnSetup func()
+
 	// OnSend is called when Pinger sends a packet
 	OnSend func(*Packet)
 
@@ -561,6 +564,10 @@ func (p *Pinger) Run() error {
 	wg.Add(1)
 	//nolint:errcheck
 	go p.recvICMP(conn, recv, &wg)
+
+	if handler := p.OnSetup; handler != nil {
+		handler()
+	}
 
 	err = p.sendICMP(conn)
 	if err != nil {
