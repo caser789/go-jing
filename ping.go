@@ -8,6 +8,7 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
+	"log"
 	"math"
 	"math/rand"
 	"net"
@@ -145,6 +146,8 @@ type Pinger struct {
 	// protocol is "icmp" or "udp"
 	protocol          string
 	awaitingSequences map[int]struct{}
+
+	logger Logger
 }
 
 type packet struct {
@@ -195,6 +198,7 @@ func New(addr string) *Pinger {
 		network:           "ip",
 		protocol:          "udp",
 		awaitingSequences: map[int]struct{}{},
+		logger:            StdLogger{Logger: log.New(log.Writer(), log.Prefix(), log.Flags())},
 	}
 }
 
@@ -202,6 +206,11 @@ func New(addr string) *Pinger {
 func NewPinger(addr string) (*Pinger, error) {
 	p := New(addr)
 	return p, p.Resolve()
+}
+
+// SetLogger sets the logger to be used to log events from the pinger.
+func (p *Pinger) SetLogger(logger Logger) {
+	p.logger = logger
 }
 
 // SetIPAddr sets the ip address of the target host.
@@ -533,6 +542,11 @@ func (p *Pinger) processPacket(recv *packet) error {
 // done. If Count or Interval are not specified, it will continuously until
 // it is interrupted.
 func (p *Pinger) Run() error {
+	logger := p.logger
+	if logger == nil {
+		logger = NoopLogger{}
+	}
+
 	var conn *icmp.PacketConn
 	var err error
 	if p.ipaddr == nil {
@@ -593,7 +607,7 @@ func (p *Pinger) Run() error {
 		case r := <-recv:
 			err := p.processPacket(r)
 			if err != nil {
-				fmt.Println("FATAL: ", err)
+				logger.Fatalf("processing received packet: %s", err)
 			}
 		case <-interval.C:
 			if p.Count > 0 && p.PacketsSent >= p.Count {
@@ -602,7 +616,7 @@ func (p *Pinger) Run() error {
 			}
 			err = p.sendICMP(conn)
 			if err != nil {
-				fmt.Println("FATAL: ", err)
+				logger.Fatalf("sending packet: %s", err)
 			}
 		}
 		if p.Count > 0 && p.PacketsRecv >= p.Count {
