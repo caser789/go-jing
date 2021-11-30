@@ -93,6 +93,13 @@ type Pinger struct {
 	// Number of duplicate packets received
 	PacketsRecvDuplicates int
 
+	// Round trip time statistics
+	minRtt    time.Duration
+	maxRtt    time.Duration
+	avgRtt    time.Duration
+	stdDevRtt time.Duration
+	stddevm2  time.Duration
+
 	// If true, keep a record of rtts of all received packets.
 	// Set to false to avoid memory bloat for long running pings.
 	RecordRtts bool
@@ -200,6 +207,27 @@ func (p *Pinger) SetIPAddr(ipaddr *net.IPAddr) {
 	p.addr = ipaddr.String()
 }
 
+func (p *Pinger) updateStatistics(pkt *Packet) {
+	p.PacketsRecv++
+	if p.PacketsRecv == 1 || pkt.Rtt < p.minRtt {
+		p.minRtt = pkt.Rtt
+	}
+
+	if pkt.Rtt > p.maxRtt {
+		p.maxRtt = pkt.Rtt
+	}
+
+	pktCount := time.Duration(p.PacketsRecv)
+	// welford's online method for stddev
+	// https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+	delta := pkt.Rtt - p.avgRtt
+	p.avgRtt += delta / pktCount
+	delta2 := pkt.Rtt - p.avgRtt
+	p.stddevm2 += delta * delta2
+
+	p.stdDevRtt = time.Duration(math.Sqrt(float64(p.stddevm2 / pktCount)))
+}
+
 // Resolve does the DNS lookup for the Pinger address and sets IP protocol.
 func (p *Pinger) Resolve() error {
 	if len(p.addr) == 0 {
@@ -278,20 +306,6 @@ func (p *Pinger) Privileged() bool {
 // get its finished statistics.
 func (p *Pinger) Statistics() *Statistics {
 	loss := float64(p.PacketsSent-p.PacketsRecv) / float64(p.PacketsSent) * 100
-	var min, max, total time.Duration
-	if len(p.rtts) > 0 {
-		min = p.rtts[0]
-		max = p.rtts[0]
-	}
-	for _, rtt := range p.rtts {
-		if rtt < min {
-			min = rtt
-		}
-		if rtt > max {
-			max = rtt
-		}
-		total += rtt
-	}
 	s := Statistics{
 		PacketsSent:           p.PacketsSent,
 		PacketsRecv:           p.PacketsRecv,
@@ -300,16 +314,10 @@ func (p *Pinger) Statistics() *Statistics {
 		Rtts:                  p.rtts,
 		Addr:                  p.addr,
 		IPAddr:                p.ipaddr,
-		MaxRtt:                max,
-		MinRtt:                min,
-	}
-	if len(p.rtts) > 0 {
-		s.AvgRtt = total / time.Duration(len(p.rtts))
-		var sumsquares time.Duration
-		for _, rtt := range p.rtts {
-			sumsquares += (rtt - s.AvgRtt) * (rtt - s.AvgRtt)
-		}
-		s.StdDevRtt = time.Duration(math.Sqrt(float64(sumsquares / time.Duration(len(p.rtts)))))
+		MaxRtt:                p.maxRtt,
+		MinRtt:                p.minRtt,
+		AvgRtt:                p.avgRtt,
+		StdDevRtt:             p.stdDevRtt,
 	}
 	return &s
 }
@@ -458,7 +466,7 @@ func (p *Pinger) processPacket(recv *packet) error {
 		return nil
 	}
 
-	outPkt := &Packet{
+	inPkt := &Packet{
 		Nbytes: recv.nbytes,
 		IPAddr: p.ipaddr,
 		Addr:   p.addr,
@@ -467,8 +475,7 @@ func (p *Pinger) processPacket(recv *packet) error {
 
 	switch pkt := m.Body.(type) {
 	case *icmp.Echo:
-		// Check if the reply has the ID we expect.
-		if pkt.ID != p.id {
+		if !p.matchID(pkt.ID) {
 			return nil
 		}
 		if len(pkt.Data) < timeSliceLength+trackerLength {
@@ -482,30 +489,30 @@ func (p *Pinger) processPacket(recv *packet) error {
 			return nil
 		}
 
-		outPkt.Rtt = receivedAt.Sub(timestamp)
-		outPkt.Seq = pkt.Seq
+		inPkt.Rtt = receivedAt.Sub(timestamp)
+		inPkt.Seq = pkt.Seq
 		// If we've already received this sequence, ignore it.
 		if _, inflight := p.awaitingSequences[pkt.Seq]; !inflight {
 			p.PacketsRecvDuplicates++
 			if p.OnDuplicateRecv != nil {
-				p.OnDuplicateRecv(outPkt)
+				p.OnDuplicateRecv(inPkt)
 			}
 			return nil
 		}
 		// Remove it from the list of sequences we're waiting for so we don't get duplicates.
 		delete(p.awaitingSequences, pkt.Seq)
-		p.PacketsRecv++
+		p.updateStatistics(inPkt)
 	default:
 		// Very bad, not sure how this can happen
 		return fmt.Errorf("invalid ICMP echo reply; type: '%T', '%v'", pkt, pkt)
 	}
 
 	if p.RecordRtts {
-		p.rtts = append(p.rtts, outPkt.Rtt)
+		p.rtts = append(p.rtts, inPkt.Rtt)
 	}
 	handler := p.OnRecv
 	if handler != nil {
-		handler(outPkt)
+		handler(inPkt)
 	}
 
 	return nil
